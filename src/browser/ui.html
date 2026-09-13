@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pi Browser Capture</title><link rel="stylesheet" href="ui.css"></head>
+<body>
+  <main>
+    <header><div class="brand"><img src="icon.svg" alt="" width="34" height="34"><div><strong>Browser Capture</strong><span>网页上下文，带到 Pi</span></div></div><span class="badge" id="connection">连接中</span></header>
+    <section id="intro"><p class="eyebrow">FROM PAGE TO PROMPT</p><h1>圈出你想讨论的地方。</h1><p class="muted">将截图、页面结构和你的想法，一起添加到 Pi 草稿。</p></section>
+    <section id="selection" class="card"><h2>选取页面</h2><div class="mode-grid"><button id="region" class="mode" type="button"><span class="mode-icon">⌗</span><strong>矩形框选</strong><span>拖动选取任意区域</span></button><button id="element" class="mode" type="button"><span class="mode-icon">↖</span><strong>元素点选</strong><span>高亮并选中一个元素</span></button></div><p class="hint">快捷键 Alt + Shift + P 框选 · Esc 取消</p></section>
+    <section id="review" hidden>
+      <div class="image-frame"><img id="screenshot" alt="选区截图预览"></div>
+      <div class="page-meta"><strong id="page-title"></strong><span id="page-url"></span><span id="dimensions"></span></div>
+      <details class="dom-details"><summary>页面结构与采集说明</summary><p id="warnings" class="muted"></p><pre id="dom"></pre></details>
+      <label class="field" for="prompt">想让 Pi 做什么？<textarea id="prompt" maxlength="20000" rows="4" placeholder="例如：把这个卡片的布局改成截图中的样子……"></textarea></label>
+      <label class="field" for="target">添加到哪个会话？<select id="target"><option value="">正在发现本机 Pi 会话…</option></select></label>
+      <label class="check"><input type="checkbox" id="login"><span><strong>携带当前站点登录状态</strong><small>Cookie 和 Storage 保存为本机附件；草稿只包含摘要与路径。</small></span></label>
+      <div class="actions"><button id="discard" class="secondary" type="button">丢弃</button><button id="send" class="primary" type="button" disabled>添加到 Pi 草稿 <span>↗</span></button></div>
+      <p class="hint">添加后，在 Pi 中确认并提交。不会自动发送给模型。</p>
+    </section>
+    <section id="success" class="card success" hidden><span class="success-icon">✓</span><h1>已添加到 Pi 草稿</h1><p class="muted">回到终端继续编辑。提交时，截图会作为图片一起发送。</p><button id="close" class="primary" type="button">完成</button></section>
+    <details id="pair-panel" class="pair"><summary>连接设置 <span>首次使用需要配对</span></summary><p class="muted">在 Pi 中运行 <code>/browser-capture pair</code>，将令牌粘贴到这里。配对后会自动发现本机会话。</p><label class="field" for="token">配对令牌<input type="password" id="token" autocomplete="off" spellcheck="false" placeholder="64 位配对令牌"></label><button id="pair" class="secondary" type="button">配对并连接</button></details>
+    <p id="message" role="status" aria-live="polite"></p>
+    <footer><span class="dot"></span> 仅连接本机 · PI BROWSER CAPTURE</footer>
+  </main><script src="ui.js"></script>
+</body></html>
