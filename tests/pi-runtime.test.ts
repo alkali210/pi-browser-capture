@@ -25,11 +25,22 @@ test("Pi 0.84.2 discovers the package, appends drafts, merges images and survive
   const { session } = await createAgentSession({ cwd: root, agentDir: root, settingsManager, resourceLoader: loader, modelRuntime: runtime, model, sessionManager: SessionManager.inMemory(root), noTools: "all" });
   let draft = "已有草稿", status = "";
   const errors: string[] = [];
-  const ui = new Proxy({ getEditorText: () => draft, setEditorText: (value: string) => { draft = value; }, setStatus: (_key: string, value?: string) => { status = value ?? ""; }, notify: (value: string, level: string) => { if (level === "error") errors.push(value); } }, { get(target, prop) { return (target as any)[prop] ?? (() => {}); } }) as unknown as ExtensionUIContext;
+  const notifications: string[] = [];
+  const ui = new Proxy({ theme: { fg: (color: string, value: string) => `<${color}>${value}</${color}>` }, getEditorText: () => draft, setEditorText: (value: string) => { draft = value; }, setStatus: (_key: string, value?: string) => { status = value ?? ""; }, notify: (value: string, level: string) => { notifications.push(value); if (level === "error") errors.push(value); } }, { get(target, prop) { return (target as any)[prop] ?? (() => {}); } }) as unknown as ExtensionUIContext;
   await session.bindExtensions({ mode: "tui", uiContext: ui, onError: error => errors.push(JSON.stringify(error)) });
   t.after(async () => { await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }); session.dispose(); });
   assert.deepEqual(errors, []);
-  const port = Number(status.match(/:(\d+)/)?.[1]); assert.ok(port >= 43821);
+  assert.equal(status, "", "connection details must not appear in the footer");
+  await session.prompt("/browser-capture");
+  assert.equal(draft, "/browser-capture ", "bare command stays in the editor for subcommands");
+  assert.equal(notifications.length, 0, "bare command must not show status");
+  const command = session.extensionRunner.getRegisteredCommands().find(c => c.name === "browser-capture")!;
+  assert.deepEqual((await command.getArgumentCompletions!(""))?.map(c => c.value), ["pair", "list", "delete", "status"]);
+  assert.deepEqual((await command.getArgumentCompletions!("pa"))?.map(c => c.value), ["pair"]);
+  assert.equal(await command.getArgumentCompletions!("delete "), null);
+  await session.prompt("/browser-capture status");
+  const port = Number(notifications.at(-1)?.match(/:(\d+)/)?.[1]); assert.ok(port >= 43821);
+  draft = "已有草稿";
   const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin: `chrome-extension://${"b".repeat(32)}` }); t.after(() => ws.terminate());
   await once(ws, "open");
   let response = once(ws, "message"); ws.send(JSON.stringify({ type: "hello", version: 1, token: new CaptureStore(join(root, "browser-capture")).token() }));
@@ -44,5 +55,5 @@ test("Pi 0.84.2 discovers the package, appends drafts, merges images and survive
   }
   assert.equal((await session.extensionRunner.emitInput("无标记", undefined, "interactive")).action, "continue");
   await session.reload();
-  assert.deepEqual(errors, []); assert.ok(status.includes("浏览器"));
+  assert.deepEqual(errors, []); assert.equal(status, "");
 });

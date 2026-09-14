@@ -18,7 +18,6 @@ export default function browserCapture(pi: ExtensionAPI) {
     if (widgetTimer) clearInterval(widgetTimer);
     widgetTimer = undefined;
     current?.ui.setWidget("browser-capture", undefined);
-    current?.ui.setStatus("browser-capture", undefined);
     current = undefined;
     const old = bridge;
     bridge = undefined;
@@ -36,8 +35,7 @@ export default function browserCapture(pi: ExtensionAPI) {
         refreshWidget();
         ctx.ui.notify("网页选区已添加到草稿，提交时会附加截图。", "info");
       } });
-      const port = await bridge.start();
-      ctx.ui.setStatus("browser-capture", `浏览器 :${port} · /browser-capture pair`);
+      await bridge.start();
       widgetTimer = setInterval(refreshWidget, 1000);
       widgetTimer.unref();
     } catch (error) { await stop(); ctx.ui.notify(`浏览器扩展启动失败：${error instanceof Error ? error.message : error}`, "error"); }
@@ -64,7 +62,21 @@ export default function browserCapture(pi: ExtensionAPI) {
   });
   pi.registerCommand("browser-capture", {
     description: "浏览器选取：pair 配对 / list 列出当前会话附件 / delete <id> 删除附件 / status 状态",
+    getArgumentCompletions: prefix => {
+      const commands = [
+        { value: "pair", label: "pair", description: "显示浏览器配对令牌" },
+        { value: "list", label: "list", description: "列出当前会话附件" },
+        { value: "delete", label: "delete", description: "删除附件：delete <UUID>" },
+        { value: "status", label: "status", description: "查看连接端口和附件目录" },
+      ];
+      const matches = commands.filter(item => item.value.startsWith(prefix));
+      return matches.length ? matches : null;
+    },
     handler: async (args, ctx) => {
+      if (!args.trim() && ctx.mode === "tui") {
+        ctx.ui.setEditorText("/browser-capture ");
+        return;
+      }
       if (!bridge || !store) { ctx.ui.notify("浏览器选取仅在本机交互式终端启用。", "warning"); return; }
       const [command = "status", id] = args.trim().split(/\s+/).filter(Boolean);
       if (command === "pair") { await ctx.ui.select(`将此令牌粘贴到浏览器扩展配对框：\n${store.token()}`, ["关闭"]); return; }
