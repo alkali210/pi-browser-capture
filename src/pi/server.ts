@@ -1,4 +1,6 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createServer, type Server } from "node:http";
+import type { Socket } from "node:net";
 import { WebSocketServer, WebSocket } from "ws";
 import { VERSION, FIRST_PORT, LAST_PORT, MAX_WIRE_BYTES, type SessionInfo, type ServerMessage, validateCapture } from "../shared/protocol.js";
 import { CaptureStore, type SavedCapture } from "./store.js";
@@ -13,24 +15,43 @@ export interface BridgeOptions {
 export class BridgeServer {
   readonly instanceId = randomUUID();
   private server?: WebSocketServer;
+  private httpServer?: Server;
+  private connections = new Set<Socket>();
+  private closing?: Promise<void>;
   private authenticated = new Set<WebSocket>();
   private active = false;
   port = 0;
   constructor(private options: BridgeOptions) {}
   info(): SessionInfo { return { ...this.options.session(), instanceId: this.instanceId }; }
   async start(): Promise<number> {
+    await this.closing;
     const token = this.options.store.token();
     const ports = this.options.ports ?? Array.from({ length: LAST_PORT - FIRST_PORT + 1 }, (_, i) => FIRST_PORT + i);
     for (const port of ports) {
-      const wss = new WebSocketServer({ host: "127.0.0.1", port, maxPayload: MAX_WIRE_BYTES, perMessageDeflate: false, verifyClient: ({ origin }: { origin: string }) => extensionOrigin(origin) });
+      const httpServer = createServer((_req, res) => {
+        res.writeHead(426, { "Content-Type": "text/plain" });
+        res.end("Upgrade Required");
+      });
+      // Track TCP connections before upgrade, including incomplete browser handshakes.
+      httpServer.on("connection", socket => {
+        this.connections.add(socket);
+        socket.once("close", () => this.connections.delete(socket));
+      });
+      const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_WIRE_BYTES, perMessageDeflate: false, verifyClient: ({ origin }: { origin: string }) => extensionOrigin(origin) });
       try {
-        await new Promise<void>((resolve, reject) => { wss.once("listening", resolve); wss.once("error", reject); });
+        await new Promise<void>((resolve, reject) => {
+          wss.once("listening", resolve);
+          wss.once("error", reject);
+          httpServer.listen(port, "127.0.0.1");
+        });
       } catch (error: any) {
         wss.close();
+        httpServer.close();
         if (error.code === "EADDRINUSE") continue;
         throw error;
       }
       this.server = wss;
+      this.httpServer = httpServer;
       this.port = (wss.address() as { port: number }).port;
       this.active = true;
       wss.on("error", () => {});
@@ -76,13 +97,31 @@ export class BridgeServer {
   }
   private send(socket: WebSocket, message: ServerMessage) { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message)); }
   broadcast() { if (this.active) for (const socket of this.authenticated) this.send(socket, { type: "session", session: this.info() }); }
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    if (this.closing) return this.closing;
     this.active = false;
     const server = this.server;
+    const httpServer = this.httpServer;
     this.server = undefined;
-    if (!server) return;
+    this.httpServer = undefined;
+    if (!server || !httpServer) return Promise.resolve();
+    // Stop accepting connections before destroying both upgraded and raw sockets.
+    const closed = Promise.all([
+      new Promise<void>(resolve => server.close(() => resolve())),
+      new Promise<void>(resolve => {
+        // Bun can omit the HTTP close callback after a WebSocket upgrade.
+        // Connections are forcibly released below; do not hold host shutdown
+        // hostage to that callback (omp allows only 2000ms per handler).
+        const timer = setTimeout(() => { httpServer.unref(); resolve(); }, 500);
+        httpServer.close(() => { clearTimeout(timer); resolve(); });
+      }),
+    ]);
     for (const socket of server.clients) socket.terminate();
+    for (const socket of this.connections) socket.destroy();
+    httpServer.closeAllConnections();
+    this.connections.clear();
     this.authenticated.clear();
-    await new Promise<void>(resolve => server.close(() => resolve()));
+    this.closing = closed.then(() => {}).finally(() => { this.closing = undefined; });
+    return this.closing;
   }
 }

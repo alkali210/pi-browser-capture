@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
+import { connect as connectTcp } from "node:net";
+import { get } from "node:http";
 import WebSocket from "ws";
 import { BridgeServer } from "../src/pi/server.js";
 import { CaptureStore } from "../src/pi/store.js";
@@ -13,13 +15,48 @@ import { capture } from "./helpers.js";
 const origin = `chrome-extension://${"a".repeat(32)}`;
 function receive(ws: WebSocket): Promise<any> { return new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error("Reply timed out")), 2000); ws.once("message", data => { clearTimeout(timer); resolve(JSON.parse(data.toString())); }); }); }
 async function connect(port: number, token: string) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin });
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers: { Origin: origin } });
   await once(ws, "open");
   const reply = receive(ws);
   ws.send(JSON.stringify({ type: "hello", version: 1, token }));
   const welcome = await reply;
   return { ws, welcome };
 }
+
+test("shutdown releases incomplete handshakes and connected clients within the host deadline", async t => {
+  const root = mkdtempSync(join(tmpdir(), "pi-shutdown-"));
+  const store = new CaptureStore(root);
+  const options = { store, session: () => ({ sessionId: "shutdown", name: "Test", cwd: root, busy: false }), attach: () => {}, ports: [0] };
+  const server = new BridgeServer(options);
+  const port = await server.start();
+  const sockets: Array<{ destroy?: () => void; terminate?: () => void }> = [];
+  t.after(async () => {
+    for (const socket of sockets) { socket.destroy?.(); socket.terminate?.(); }
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+  for (const partial of [false, true]) {
+    const socket = connectTcp({ host: "127.0.0.1", port });
+    sockets.push(socket);
+    await once(socket, "connect");
+    if (partial) socket.write("GET / HTTP/1.1\r\nHost: localhost\r\n");
+  }
+  const { ws } = await connect(port, store.token());
+  sockets.push(ws);
+  const unauthenticated = new WebSocket(`ws://127.0.0.1:${port}`, { headers: { Origin: origin } });
+  sockets.push(unauthenticated);
+  await once(unauthenticated, "open");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.all([server.close(), server.close()]),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Shutdown exceeded 1500ms")), 1500); }),
+    ]);
+  } finally { clearTimeout(timer); }
+  const replacement = new BridgeServer({ ...options, ports: [port] });
+  try { assert.equal(await replacement.start(), port); }
+  finally { await replacement.close(); }
+});
 
 test("real WebSockets authenticate, route sessions, acknowledge retries and release ports", async t => {
   const root = mkdtempSync(join(tmpdir(), "pi-bridge-"));
@@ -46,10 +83,17 @@ test("rejects ordinary web origins, invalid credentials and incompatible version
   const server = new BridgeServer({ store, session: () => ({ sessionId: randomUUID(), name: "Auth", cwd: root, busy: false }), attach: () => {}, ports: [0] });
   const port = await server.start();
   t.after(async () => { await server.close(); rmSync(root, { recursive: true, force: true }); });
-  const badOrigin = new WebSocket(`ws://127.0.0.1:${port}`, { origin: "https://example.com" });
-  const [error] = await once(badOrigin, "error"); assert.match(error.message, /401/);
+  const status = await new Promise<number | undefined>((resolve, reject) => {
+    const request = get(`http://127.0.0.1:${port}`, { headers: {
+      Origin: "https://example.com", Connection: "Upgrade", Upgrade: "websocket",
+      "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+    } }, response => { response.resume(); resolve(response.statusCode); });
+    request.on("error", reject);
+    request.on("upgrade", (_response, socket) => { socket.destroy(); reject(new Error("Disallowed origin was accepted")); });
+  });
+  assert.equal(status, 401);
   for (const hello of [{ type: "hello", version: 1, token: "0".repeat(64) }, { type: "hello", version: 99, token: store.token() }]) {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin }); await once(ws, "open");
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers: { Origin: origin } }); await once(ws, "open");
     const close = once(ws, "close"); ws.send(JSON.stringify(hello)); const [code] = await close; assert.equal(code, 1008);
   }
 });
