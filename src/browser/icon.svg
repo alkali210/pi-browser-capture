@@ -1,1 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><rect width="40" height="40" rx="12" fill="#285f46"/><g stroke="#e4f3e6" stroke-width="2" fill="none" stroke-linecap="round"><path d="M11 16v-5h5m8 0h5v5m0 8v5h-5m-8 0h-5v-5"/><rect x="16" y="16" width="8" height="8" rx="2"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+  <rect width="40" height="40" rx="12" fill="#285f46"/>
+  <g fill="none" stroke="#e4f3e6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 16v-5h5m8 0h5v5m0 8v5h-5m-8 0h-5v-5"/>
+    <rect x="16" y="16" width="8" height="8" rx="2"/>
+  </g>
+  <!-- Small pi signature at the lower left, outlined to avoid font dependencies. -->
+  <rect x="3" y="24" width="15" height="14" rx="4" fill="#285f46"/>
+  <path d="M5 27h11v2h-2.3v4.2c0 .7.3 1 1 1H16v2h-1.7c-1.8 0-2.8-1-2.8-2.9V29H9.2v3.4c0 1.6-.4 2.9-1.1 3.8H5.5C6.6 35 7 33.8 7 32.2V29H5z" fill="#e4f3e6"/>
+</svg>

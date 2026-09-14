@@ -8,6 +8,8 @@ let capture: Capture | undefined;
 let sending = false, finished = false;
 const target = $<HTMLSelectElement>("target");
 const login = $<HTMLInputElement>("login");
+const fullDom = $<HTMLInputElement>("full-dom");
+fullDom.checked = false;
 function message(text: string, error = false) { const el = $("message"); el.textContent = text; el.classList.toggle("error", error); }
 async function request(data: Record<string, unknown>): Promise<any> {
   const result: any = await browser.runtime.sendMessage(data);
@@ -69,15 +71,15 @@ $("send").addEventListener("click", async () => {
   sending = true;
   $<HTMLButtonElement>("send").disabled = true;
   $<HTMLButtonElement>("discard").disabled = true;
-  login.disabled = true; target.disabled = true;
+  login.disabled = true; fullDom.disabled = true; target.disabled = true;
   message("正在添加到 Pi 草稿…");
   try {
-    await request({ type: "send", id: capture.id, target: target.value, prompt: $<HTMLTextAreaElement>("prompt").value, includeLogin: login.checked });
+    await request({ type: "send", id: capture.id, target: target.value, prompt: $<HTMLTextAreaElement>("prompt").value, includeLogin: login.checked, includeFullDom: fullDom.checked });
     finished = true;
     $("review").hidden = true; $("success").hidden = false; $("pair-panel").hidden = true;
     message("");
   } catch (error) { fail(error); }
-  finally { sending = false; login.disabled = false; target.disabled = false; $<HTMLButtonElement>("discard").disabled = false; await refresh().catch(fail); }
+  finally { sending = false; login.disabled = false; fullDom.disabled = false; target.disabled = false; $<HTMLButtonElement>("discard").disabled = false; await refresh().catch(fail); }
 });
 $("discard").addEventListener("click", async () => { try { await request({ type: "discard", id: captureId }); window.close(); } catch (error) { fail(error); } });
 $("close").addEventListener("click", () => window.close());

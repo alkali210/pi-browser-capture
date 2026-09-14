@@ -12,6 +12,7 @@
       <details class="dom-details"><summary>页面结构与采集说明</summary><p id="warnings" class="muted"></p><pre id="dom"></pre></details>
       <label class="field" for="prompt">想让 Pi 做什么？<textarea id="prompt" maxlength="20000" rows="4" placeholder="例如：把这个卡片的布局改成截图中的样子……"></textarea></label>
       <label class="field" for="target">添加到哪个会话？<select id="target"><option value="">正在发现本机 Pi 会话…</option></select></label>
+      <label class="check"><input type="checkbox" id="full-dom"><span><strong>发送完整 DOM</strong><small>默认仅发送和保存可见文本摘要（最多 2000 字符），配合截图与选区位置定位修改区域。勾选后才发送并保存完整采集的 HTML 和文本，仍受采集上限限制。</small></span></label>
       <label class="check"><input type="checkbox" id="login"><span><strong>携带当前站点登录状态</strong><small>Cookie 和 Storage 保存为本机附件；草稿只包含摘要与路径。</small></span></label>
       <div class="actions"><button id="discard" class="secondary" type="button">丢弃</button><button id="send" class="primary" type="button" disabled>添加到 Pi 草稿 <span>↗</span></button></div>
       <p class="hint">添加后，在 Pi 中确认并提交。不会自动发送给模型。</p>

@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { FIRST_PORT, LAST_PORT, VERSION, MAX_STATE_CHARS, pixelRect, validateCapture, validateSession, type Capture, type LoginState, type SessionInfo, type ServerMessage } from "../shared/protocol.js";
+import { FIRST_PORT, LAST_PORT, VERSION, MAX_STATE_CHARS, pixelRect, prepareCapture, validateCapture, validateSession, type Capture, type LoginState, type SessionInfo, type ServerMessage } from "../shared/protocol.js";
 
 declare const __FIREFOX__: boolean;
 interface Peer { socket: WebSocket; session?: SessionInfo; lastSeen: number }
@@ -197,7 +197,7 @@ async function sendCapture(message: any) {
   if (!pair || pair[1].socket.readyState !== WebSocket.OPEN) throw new Error("目标会话已断开或切换，请重新选择。");
   const [port, peer] = pair;
   const session = { ...peer.session! };
-  const capture = { ...preview.capture, prompt: message.prompt };
+  const capture = prepareCapture({ ...preview.capture, prompt: message.prompt, includeFullDom: message.includeFullDom === true });
   if (message.includeLogin === true) capture.login = await loginState(preview);
   validateCapture(capture);
   if (peer.session?.instanceId !== session.instanceId || peer.session?.sessionId !== session.sessionId || peer.socket.readyState !== WebSocket.OPEN) throw new Error("目标会话已变化，请重新选择。");

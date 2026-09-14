@@ -3,6 +3,7 @@ export const FIRST_PORT = 43821;
 export const LAST_PORT = 43852;
 export const MAX_WIRE_BYTES = 20 * 1024 * 1024;
 export const MAX_DOM_CHARS = 60_000;
+export const MAX_DOM_SUMMARY_CHARS = 2000;
 export const MAX_NODES = 1500;
 export const MAX_STATE_CHARS = 2_000_000;
 
@@ -23,7 +24,7 @@ export interface LoginState {
 }
 export interface Capture {
   id: string; page: PageInfo; dom: DomSnapshot;
-  png: string; prompt: string; login?: LoginState;
+  png: string; prompt: string; login?: LoginState; includeFullDom?: boolean;
 }
 export interface SessionInfo { instanceId: string; sessionId: string; name: string; cwd: string; busy: boolean }
 export type ClientMessage =
@@ -57,6 +58,7 @@ export function validateCapture(value: unknown): asserts value is Capture {
   if (!record(v) || !record(r) || !record(s) || ![v.width,v.height,v.dpr,r.x,r.y,r.width,r.height,s.x,s.y].every(finite) || v.width <= 0 || v.height <= 0 || v.dpr <= 0 || r.x < 0 || r.y < 0 || r.width < 1 || r.height < 1 || r.x + r.width > v.width + 1 || r.y + r.height > v.height + 1) throw new Error("Invalid capture geometry");
   if (!["region", "element"].includes(p.mode) || (p.locator !== undefined && !str(p.locator, 4096))) throw new Error("Invalid selection mode");
   if (!str(c.dom.html, MAX_DOM_CHARS) || !str(c.dom.text, MAX_DOM_CHARS) || typeof c.dom.truncated !== "boolean" || !warnings(c.dom.warnings)) throw new Error("Invalid DOM snapshot");
+  if (c.includeFullDom !== undefined && typeof c.includeFullDom !== "boolean") throw new Error("Invalid full DOM option");
   if (!str(c.png, 16_000_000) || !/^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.png) || c.png.length % 4 !== 0) throw new Error("Invalid PNG attachment");
   if (c.login !== undefined) {
     const l = c.login;
@@ -77,3 +79,17 @@ export function pixelRect(rect: Rect, viewport: { width: number; height: number 
 export const marker = (id: string) => `[pi-browser-capture:${id}]`;
 export const markerPattern = () => /\[pi-browser-capture:([0-9a-f-]{36})\]/gi;
 export const safeText = (text: string) => text.replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "");
+export function domSummary(dom: DomSnapshot): string {
+  const text = safeText(dom.text).replace(/\s+/g, " ").trim();
+  if (!text) return "选区无可见文本，请结合截图查看。";
+  return text.length > MAX_DOM_SUMMARY_CHARS ? `${text.slice(0, MAX_DOM_SUMMARY_CHARS - 1)}…` : text;
+}
+
+/** Apply the user's DOM choice before transport and again before persistence. */
+export function prepareCapture(capture: Capture): Capture {
+  if (capture.includeFullDom === true) return capture;
+  return { ...capture, includeFullDom: false, dom: {
+    html: "", text: domSummary(capture.dom),
+    truncated: capture.dom.truncated, warnings: [...capture.dom.warnings]
+  } };
+}
