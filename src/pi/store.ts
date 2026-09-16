@@ -64,6 +64,22 @@ export class CaptureStore {
     if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error("Invalid removal path");
     rmSync(target, { recursive: true, force: true });
   }
+  removeSession(sessionId: string): void {
+    if (!isId(sessionId)) throw new Error("Invalid session identifier");
+    const target = resolve(join(this.root, "attachments", sessionId));
+    const base = resolve(this.root, "attachments");
+    const rel = relative(base, target);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error("Invalid removal path");
+    rmSync(target, { recursive: true, force: true });
+  }
+  removeAll(): void {
+    const target = resolve(join(this.root, "attachments"));
+    const base = resolve(this.root);
+    const rel = relative(base, target);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error("Invalid removal path");
+    rmSync(target, { recursive: true, force: true });
+    mkdirSync(target, { recursive: true, mode: 0o700 });
+  }
   image(saved: SavedCapture) { return { type: "image" as const, mimeType: "image/png" as const, data: readFileSync(join(saved.directory, "screenshot.png")).toString("base64") }; }
 }
 

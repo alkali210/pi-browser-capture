@@ -42,7 +42,7 @@ When Pi runs in WSL and the browser runs on Windows, pair using the `Mirror` net
 | `/browser-capture pair` | Display the pairing token |
 | `/browser-capture status` | Show the listening port, current session, and attachment directory |
 | `/browser-capture list` | List attachments saved for the current session and their paths |
-| `/browser-capture delete <UUID>` | Delete the specified attachment for the current session and remove its corresponding marker from the draft |
+| `/browser-capture delete [UUID\|all]` | Delete the specified attachment, clear the current session attachments if UUID is omitted, or clear all sessions attachments with `all` |
 
 ### Browser extension
 

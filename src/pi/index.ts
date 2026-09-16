@@ -61,13 +61,13 @@ export default function browserCapture(pi: ExtensionAPI) {
     }
   });
   pi.registerCommand("browser-capture", {
-    description: "浏览器选取：pair 配对 / list 列出当前会话附件 / delete <id> 删除附件 / status 状态",
+    description: "Browser capture: pair / list attachments / delete [id|all] / status",
     getArgumentCompletions: prefix => {
       const commands = [
-        { value: "pair", label: "pair", description: "显示浏览器配对令牌" },
-        { value: "list", label: "list", description: "列出当前会话附件" },
-        { value: "delete", label: "delete", description: "删除附件：delete <UUID>" },
-        { value: "status", label: "status", description: "查看连接端口和附件目录" },
+        { value: "pair", label: "pair", description: "Show browser pairing token" },
+        { value: "list", label: "list", description: "List attachments for current session" },
+        { value: "delete", label: "delete", description: "Delete attachments: delete [UUID|all] (defaults to current session, all for everything)" },
+        { value: "status", label: "status", description: "Show connection port and attachment directory" },
       ];
       const matches = commands.filter(item => item.value.startsWith(prefix));
       return matches.length ? matches : null;
@@ -77,23 +77,37 @@ export default function browserCapture(pi: ExtensionAPI) {
         ctx.ui.setEditorText("/browser-capture ");
         return;
       }
-      if (!bridge || !store) { ctx.ui.notify("浏览器选取仅在本机交互式终端启用。", "warning"); return; }
+      if (!bridge || !store) { ctx.ui.notify("Browser capture is only enabled in local interactive terminal sessions.", "warning"); return; }
       const [command = "status", id] = args.trim().split(/\s+/).filter(Boolean);
-      if (command === "pair") { await ctx.ui.select(`将此令牌粘贴到浏览器扩展配对框：\n${store.token()}`, ["关闭"]); return; }
+      if (command === "pair") { await ctx.ui.select(`Paste this token into the browser extension pairing dialog:\n${store.token()}`, ["Close"]); return; }
       if (command === "list") {
         const entries = store.list(ctx.sessionManager.getSessionId());
-        await ctx.ui.select("当前会话网页附件", entries.length ? entries.map(s => `${s.id} · ${safeText(s.capture.page.title)} · ${s.directory}`) : ["暂无附件"]);
+        await ctx.ui.select("Current session web attachments", entries.length ? entries.map(s => `${s.id} · ${safeText(s.capture.page.title)} · ${s.directory}`) : ["No attachments"]);
         return;
       }
       if (command === "delete") {
-        if (!isId(id)) { ctx.ui.notify("用法：/browser-capture delete <完整附件 UUID>", "warning"); return; }
+        if (!id) {
+          store.removeSession(ctx.sessionManager.getSessionId());
+          ctx.ui.setEditorText(ctx.ui.getEditorText().replace(markerPattern(), ""));
+          refreshWidget();
+          ctx.ui.notify("Attachments for current session cleared.", "info");
+          return;
+        }
+        if (id.toLowerCase() === "all") {
+          store.removeAll();
+          ctx.ui.setEditorText(ctx.ui.getEditorText().replace(markerPattern(), ""));
+          refreshWidget();
+          ctx.ui.notify("All session attachments cleared.", "info");
+          return;
+        }
+        if (!isId(id)) { ctx.ui.notify("Usage: /browser-capture delete [UUID|all]", "warning"); return; }
         store.remove(ctx.sessionManager.getSessionId(), id);
         ctx.ui.setEditorText(ctx.ui.getEditorText().replaceAll(`[pi-browser-capture:${id}]`, ""));
         refreshWidget();
-        ctx.ui.notify("附件已删除。", "info");
+        ctx.ui.notify("Attachment deleted.", "info");
         return;
       }
-      ctx.ui.notify(`监听 127.0.0.1:${bridge.port}\n会话 ${ctx.sessionManager.getSessionId()}\n附件目录 ${store.root}\n首次使用：/browser-capture pair`, "info");
+      ctx.ui.notify(`Listening on 127.0.0.1:${bridge.port}\nSession ${ctx.sessionManager.getSessionId()}\nAttachment directory ${store.root}\nFirst time: /browser-capture pair`, "info");
     }
   });
 }

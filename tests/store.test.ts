@@ -72,3 +72,24 @@ test("webpage text cannot create additional attachment markers", t => {
   const saved = store.save(sid, c).saved;
   assert.equal(expandInput(store, sid, draftAttachment(saved)).images.length, 1);
 });
+
+test("clears attachments by session and across all sessions", t => {
+  const root = mkdtempSync(join(tmpdir(), "pi-store-delete-")); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const store = new CaptureStore(root);
+  const sid1 = randomUUID(), sid2 = randomUUID();
+  const c1 = capture(), c2 = capture(), c3 = capture();
+  store.save(sid1, c1);
+  store.save(sid1, c2);
+  store.save(sid2, c3);
+  assert.equal(store.list(sid1).length, 2);
+  assert.equal(store.list(sid2).length, 1);
+  assert.throws(() => store.removeSession("../outside"), /identifier/);
+  store.removeSession(sid1);
+  assert.equal(store.list(sid1).length, 0);
+  assert.equal(store.list(sid2).length, 1);
+  store.save(sid1, c1);
+  assert.equal(store.list(sid1).length, 1);
+  store.removeAll();
+  assert.equal(store.list(sid1).length, 0);
+  assert.equal(store.list(sid2).length, 0);
+});

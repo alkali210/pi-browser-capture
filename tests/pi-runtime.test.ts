@@ -54,6 +54,43 @@ test("Pi 0.84.2 discovers the package, appends drafts, merges images and survive
     if (result.action === "transform") { assert.equal(result.images?.length, 2); assert.ok(result.text.includes("<browser-capture")); }
   }
   assert.equal((await session.extensionRunner.emitInput("无标记", undefined, "interactive")).action, "continue");
+  // Test delete commands
+  const store = new CaptureStore(join(root, "browser-capture"));
+  assert.equal(store.list(welcome.session.sessionId).length, 1);
+
+  // Test invalid delete uuid
+  await session.prompt("/browser-capture delete not-a-uuid");
+  assert.ok(notifications.at(-1)?.includes("Usage:"));
+
+  // Test delete by uuid
+  draft = `草稿 [pi-browser-capture:${c.id}] 内容`;
+  await session.prompt(`/browser-capture delete ${c.id}`);
+  assert.ok(notifications.at(-1)?.includes("deleted"));
+  assert.equal(draft, "草稿  内容");
+  assert.equal(store.list(welcome.session.sessionId).length, 0);
+
+  // Re-save capture and test delete without args (current session)
+  store.save(welcome.session.sessionId, c);
+  assert.equal(store.list(welcome.session.sessionId).length, 1);
+  draft = `草稿 [pi-browser-capture:${c.id}] 内容`;
+  await session.prompt("/browser-capture delete");
+  assert.ok(notifications.at(-1)?.includes("cleared"));
+  assert.equal(draft, "草稿  内容");
+  assert.equal(store.list(welcome.session.sessionId).length, 0);
+
+  // Re-save capture and test delete all
+  const otherSid = "11111111-1111-1111-1111-111111111111";
+  store.save(welcome.session.sessionId, c);
+  store.save(otherSid, capture());
+  assert.equal(store.list(welcome.session.sessionId).length, 1);
+  assert.equal(store.list(otherSid).length, 1);
+  draft = `草稿 [pi-browser-capture:${c.id}] 内容`;
+  await session.prompt("/browser-capture delete all");
+  assert.ok(notifications.at(-1)?.includes("cleared"));
+  assert.equal(draft, "草稿  内容");
+  assert.equal(store.list(welcome.session.sessionId).length, 0);
+  assert.equal(store.list(otherSid).length, 0);
+
   await session.reload();
   assert.deepEqual(errors, []); assert.equal(status, "");
 });
