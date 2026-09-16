@@ -19,6 +19,7 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
+    "test:pi-runtime": "npm run build && tsx --test tests/pi-runtime.integration.ts",
     "check": "npm run typecheck && npm run build && npm test",
     "prepack": "npm run build"
   },
@@ -26,7 +27,7 @@
     "ws": "^8.18.3"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.84.2 <0.85.0"
+    "@earendil-works/pi-coding-agent": ">=0.84.2"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.84.2",

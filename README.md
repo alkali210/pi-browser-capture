@@ -10,7 +10,7 @@ Supports Chrome / Edge and Firefox. Multiple Pi or omp processes can be online o
 
 ```bash
 npm ci
-npm run check
+npm run build
 pi install .
 ```
 
