@@ -48,7 +48,7 @@ export default function browserCapture(pi: ExtensionAPI) {
     if (ctx.mode !== "tui" || event.source !== "interactive" || !markerPattern().test(event.text)) return { action: "continue" as const };
     try {
       const result = expandInput(store, ctx.sessionManager.getSessionId(), event.text);
-      if (result.count && !ctx.model?.input.includes("image")) {
+      if (result.images.length && !ctx.model?.input.includes("image")) {
         ctx.ui.notify("当前模型不支持图片，请切换到视觉模型后提交。", "warning");
         ctx.ui.setEditorText(event.text);
         return { action: "handled" as const };

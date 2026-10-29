@@ -190,7 +190,7 @@ async function loginState(preview: Preview): Promise<LoginState> {
   return state;
 }
 
-async function sendCapture(message: any) {
+async function attachCapture(message: any) {
   const preview = (await previews())[message.id];
   if (!preview) throw new Error("预览已过期，请重新选取。");
   const pair = [...peers.entries()].find(([, p]) => p.session && `${p.session.instanceId}:${p.session.sessionId}` === message.target);
@@ -233,9 +233,19 @@ browser.runtime.onMessage.addListener((message: any, sender: browser.Runtime.Mes
         return { ok: true };
       }
       case "start": await startSelection(message.tabId, message.mode); return { ok: true };
+      case "login-preview": {
+        const tab = await browser.tabs.get(message.tabId);
+        if (!tab.url || !/^https?:\/\//.test(tab.url)) throw new Error("Please open an HTTP(S) page.");
+        const capture: Capture = { id: crypto.randomUUID(), prompt: "", png: "", dom: { html: "", text: "", truncated: false, warnings: [] }, page: {
+          url: tab.url, title: tab.title || "", capturedAt: new Date().toISOString(), mode: "login",
+          viewport: { width: 1, height: 1, dpr: 1 }, scroll: { x: 0, y: 0 }, rect: { x: 0, y: 0, width: 1, height: 1 }
+        } };
+        await setPreview({ capture, tabId: message.tabId, createdAt: Date.now() });
+        return { capture };
+      }
       case "preview": return { preview: (await previews())[message.id] };
       case "discard": await deletePreview(message.id); return { ok: true };
-      case "send": return await sendCapture(message);
+      case "attach": return await attachCapture(message);
       default: throw new Error("Unknown request");
     }
   })().catch(error => ({ error: error instanceof Error ? error.message : "操作失败" }));

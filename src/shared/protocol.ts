@@ -12,7 +12,7 @@ export interface PageInfo {
   url: string; title: string; capturedAt: string;
   viewport: { width: number; height: number; dpr: number };
   scroll: { x: number; y: number };
-  rect: Rect; mode: "region" | "element"; locator?: string;
+  rect: Rect; mode: "region" | "element" | "login"; locator?: string;
 }
 export interface DomSnapshot { html: string; text: string; truncated: boolean; warnings: string[] }
 export interface LoginState {
@@ -56,10 +56,11 @@ export function validateCapture(value: unknown): asserts value is Capture {
   if (!str(p.url, 16_384) || !/^https?:\/\//.test(p.url) || !str(p.title, 4096) || !str(p.capturedAt, 64) || !Number.isFinite(Date.parse(p.capturedAt))) throw new Error("Invalid page metadata");
   const v = p.viewport, r = p.rect, s = p.scroll;
   if (!record(v) || !record(r) || !record(s) || ![v.width,v.height,v.dpr,r.x,r.y,r.width,r.height,s.x,s.y].every(finite) || v.width <= 0 || v.height <= 0 || v.dpr <= 0 || r.x < 0 || r.y < 0 || r.width < 1 || r.height < 1 || r.x + r.width > v.width + 1 || r.y + r.height > v.height + 1) throw new Error("Invalid capture geometry");
-  if (!["region", "element"].includes(p.mode) || (p.locator !== undefined && !str(p.locator, 4096))) throw new Error("Invalid selection mode");
+  if (!["region", "element", "login"].includes(p.mode) || (p.locator !== undefined && !str(p.locator, 4096))) throw new Error("Invalid selection mode");
   if (!str(c.dom.html, MAX_DOM_CHARS) || !str(c.dom.text, MAX_DOM_CHARS) || typeof c.dom.truncated !== "boolean" || !warnings(c.dom.warnings)) throw new Error("Invalid DOM snapshot");
   if (c.includeFullDom !== undefined && typeof c.includeFullDom !== "boolean") throw new Error("Invalid full DOM option");
-  if (!str(c.png, 16_000_000) || !/^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.png) || c.png.length % 4 !== 0) throw new Error("Invalid PNG attachment");
+  if (p.mode === "login" && (!c.login || c.png !== "" || c.dom.html !== "" || c.dom.text !== "")) throw new Error("Invalid login-only attachment");
+  if (p.mode !== "login" && (!str(c.png, 16_000_000) || !/^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.png) || c.png.length % 4 !== 0)) throw new Error("Invalid PNG attachment");
   if (c.login !== undefined) {
     const l = c.login;
     if (!record(l) || l.origin !== new URL(p.url).origin || !str(l.capturedAt, 64) || !Number.isFinite(Date.parse(l.capturedAt)) || !Array.isArray(l.cookies) || !l.cookies.every(record) || !strings(l.localStorage) || !strings(l.sessionStorage) || !warnings(l.warnings) || JSON.stringify(l).length > MAX_STATE_CHARS) throw new Error("Invalid login state");
@@ -87,7 +88,7 @@ export function domSummary(dom: DomSnapshot): string {
 
 /** Apply the user's DOM choice before transport and again before persistence. */
 export function prepareCapture(capture: Capture): Capture {
-  if (capture.includeFullDom === true) return capture;
+  if (capture.page.mode === "login" || capture.includeFullDom === true) return capture;
   return { ...capture, includeFullDom: false, dom: {
     html: "", text: domSummary(capture.dom),
     truncated: capture.dom.truncated, warnings: [...capture.dom.warnings]

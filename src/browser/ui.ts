@@ -37,7 +37,7 @@ async function refresh() {
     if (target.value) target.dataset.everSelected = "true";
     target.dataset.sessions = serialized;
   }
-  $<HTMLButtonElement>("send").disabled = !capture || !target.value || sending || finished;
+  $<HTMLButtonElement>("send").disabled = (!capture || (capture.page.mode === "login" && !login.checked)) || !target.value || sending || finished;
 }
 target.addEventListener("change", () => { if (target.value) target.dataset.everSelected = "true"; void refresh().catch(fail); });
 $("pair").addEventListener("click", async () => {
@@ -59,12 +59,13 @@ for (const mode of ["region", "element"]) $(mode).addEventListener("click", asyn
   } catch (error) { fail(error); }
 });
 login.addEventListener("change", async () => {
-  if (!login.checked || !capture) return;
+  if (!login.checked || !capture) { await refresh().catch(fail); return; }
   try {
     // Request from the checkbox's user gesture, before any asynchronous work.
     const granted = await browser.permissions.request({ permissions: ["cookies"], origins: [`${new URL(capture.page.url).origin}/*`] });
     if (!granted) { login.checked = false; message("未授权登录状态读取；仍可发送截图和 DOM。"); }
   } catch (error) { login.checked = false; fail(error); }
+  await refresh().catch(fail);
 });
 $("send").addEventListener("click", async () => {
   if (sending || !capture) return;
@@ -74,14 +75,14 @@ $("send").addEventListener("click", async () => {
   login.disabled = true; fullDom.disabled = true; target.disabled = true;
   message("正在添加到 Pi 草稿…");
   try {
-    await request({ type: "send", id: capture.id, target: target.value, prompt: $<HTMLTextAreaElement>("prompt").value, includeLogin: login.checked, includeFullDom: fullDom.checked });
+    await request({ type: "attach", id: capture.id, target: target.value, prompt: $<HTMLTextAreaElement>("prompt").value, includeLogin: login.checked, includeFullDom: fullDom.checked });
     finished = true;
     $("review").hidden = true; $("success").hidden = false; $("pair-panel").hidden = true;
     message("");
   } catch (error) { fail(error); }
   finally { sending = false; login.disabled = false; fullDom.disabled = false; target.disabled = false; $<HTMLButtonElement>("discard").disabled = false; await refresh().catch(fail); }
 });
-$("discard").addEventListener("click", async () => { try { await request({ type: "discard", id: captureId }); window.close(); } catch (error) { fail(error); } });
+$("discard").addEventListener("click", async () => { try { await request({ type: "discard", id: capture?.id }); window.close(); } catch (error) { fail(error); } });
 $("close").addEventListener("click", () => window.close());
 async function init() {
   if (params.has("error")) message(params.get("error")!, true);
@@ -98,6 +99,19 @@ async function init() {
     $("dimensions").textContent = `${Math.round(c.page.rect.width)} × ${Math.round(c.page.rect.height)} CSS px · ${c.page.mode === "element" ? "元素点选" : "矩形框选"}`;
     $("dom").textContent = c.dom.html;
     $("warnings").textContent = c.dom.warnings.join("\n") || "已采集选区范围内的可访问 DOM。";
+  }
+  if (!captureId) {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id && tab.url && /^https?:\/\//.test(tab.url)) {
+      capture = (await request({ type: "login-preview", tabId: tab.id })).capture;
+      $("review").hidden = false;
+      document.querySelector<HTMLElement>(".image-frame")!.hidden = true;
+      document.querySelector<HTMLElement>(".dom-details")!.hidden = true;
+      fullDom.closest<HTMLElement>("label")!.hidden = true;
+      $("page-title").textContent = capture!.page.title;
+      $("page-url").textContent = capture!.page.url;
+      $("dimensions").textContent = "勾选登录状态后，可不选区仅附加凭据。";
+    }
   }
   await refresh();
 }
