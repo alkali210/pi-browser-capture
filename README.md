@@ -51,6 +51,14 @@ When Pi runs in WSL and the browser runs on Windows, pair using the `Mirror` net
 3. By default, submission includes only a visible-text DOM summary capped at 2,000 characters. Enable Send full DOM to include the collected HTML and full visible text instead. This option starts unchecked for each capture; full DOM still follows the collection limits (1,500 nodes / 60,000 HTML characters).
 4. Click Add to Pi Draft, then return to the terminal to continue editing and submit.
 
+The main popup's Freeze picture while selecting setting is off by default and saved for future use. When enabled, rectangle selection, element selection, and the `Alt+Shift+P` shortcut use a static screenshot overlay of the visible viewport, with DOM and element geometry captured at freeze time. Completing a selection or pressing `Esc` removes the overlay and restores the live view. This freezes only the visible picture: page scripts and network requests continue running underneath.
+
+Frozen snapshots omit offscreen text, and rectangle selection skips the element-picking index to keep preparation lightweight. Element picking is independent of DOM payload truncation and supports viewport-scrolling layouts even when the root/body border box has zero height.
+
+Before showing the frozen overlay, the extension prepares an immutable DOM snapshot, captures the image, and checks again after decoding. DOM mutations (including reverted mutations) and observed layout changes discard the image/snapshot pair and trigger a fresh attempt. There are at most three attempts, with screenshots spaced at least 600 ms apart; if the page never stabilizes, the extension reports an error instead of attaching mismatched pixels and DOM. Updates after a pair is accepted do not invalidate that frozen selection.
+
+Frozen element picking follows CSS painting phases, including positioned `z-index: auto` elements above in-flow siblings and the boundaries of negative, zero, and positive stacking contexts.
+
 Existing input is not overwritten. Multiple selections can be appended to the same draft. The Pi editor displays the attachment count above the input, and the draft contains `[pi-browser-capture:…]` markers. Deleting a marker cancels submission of the corresponding image and DOM context. The accompanying plain text remains available for editing or deletion.
 
 In summary mode, the browser sends only the bounded DOM summary together with the screenshot and page/selection metadata (including the locator for element selections). Pi saves only that summary, without a `dom.html` file or full text in `capture.json`. Only Send full DOM transmits and saves the collected HTML and full text. Captures received without this option also use summary mode.

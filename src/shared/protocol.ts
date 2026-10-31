@@ -59,7 +59,7 @@ export function validateCapture(value: unknown): asserts value is Capture {
   if (!["region", "element", "login"].includes(p.mode) || (p.locator !== undefined && !str(p.locator, 4096))) throw new Error("Invalid selection mode");
   if (!str(c.dom.html, MAX_DOM_CHARS) || !str(c.dom.text, MAX_DOM_CHARS) || typeof c.dom.truncated !== "boolean" || !warnings(c.dom.warnings)) throw new Error("Invalid DOM snapshot");
   if (c.includeFullDom !== undefined && typeof c.includeFullDom !== "boolean") throw new Error("Invalid full DOM option");
-  if (p.mode === "login" && (!c.login || c.png !== "" || c.dom.html !== "" || c.dom.text !== "")) throw new Error("Invalid login-only attachment");
+  if (p.mode === "login" && (c.png !== "" || c.dom.html !== "" || c.dom.text !== "")) throw new Error("Invalid login-mode attachment");
   if (p.mode !== "login" && (!str(c.png, 16_000_000) || !/^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(c.png) || c.png.length % 4 !== 0)) throw new Error("Invalid PNG attachment");
   if (c.login !== undefined) {
     const l = c.login;

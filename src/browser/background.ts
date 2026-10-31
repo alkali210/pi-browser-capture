@@ -6,7 +6,9 @@ interface Peer { socket: WebSocket; session?: SessionInfo; lastSeen: number }
 interface Preview { capture: Capture; tabId: number; createdAt: number }
 const peers = new Map<number, Peer>();
 const waiting = new Map<string, { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
-const selecting = new Set<number>();
+const selecting = new Map<number, { key: string; frame?: string }>();
+let freezeQueue = Promise.resolve();
+let lastFreezeCaptureAt = -Infinity;
 let scanning: Promise<void> | undefined;
 let retryDelay = 1000;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -93,12 +95,65 @@ browser.runtime.onInstalled.addListener(() => { void scan(); });
 void scan();
 
 async function startSelection(tabId: number, mode: "region" | "element") {
-  const tab = await browser.tabs.get(tabId);
-  if (!tab.url || !/^https?:\/\//.test(tab.url)) throw new Error("此页面不允许选取，请打开普通 HTTP / HTTPS 网页。");
-  await browser.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
-  selecting.add(tabId);
-  try { await browser.tabs.sendMessage(tabId, { type: "start-selection", mode }); }
-  catch (error) { selecting.delete(tabId); throw error; }
+  const previous = selecting.get(tabId);
+  const selection: { key: string; frame?: string } = { key: crypto.randomUUID() };
+  selecting.set(tabId, selection);
+  const requireCurrent = () => {
+    if (selecting.get(tabId) !== selection) throw new Error("选取已取消或被新的选取替代。");
+  };
+  try {
+    const tab = await browser.tabs.get(tabId);
+    requireCurrent();
+    if (!tab.url || !/^https?:\/\//.test(tab.url)) throw new Error("此页面不允许选取，请打开普通 HTTP / HTTPS 网页。");
+    await browser.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+    requireCurrent();
+    await browser.tabs.sendMessage(tabId, { type: "cancel-selection", selectionKey: previous?.key });
+    requireCurrent();
+    const { freezePage } = await browser.storage.local.get("freezePage");
+    requireCurrent();
+    if (freezePage !== true) {
+      const current = await browser.tabs.get(tabId);
+      requireCurrent();
+      if (!current.active || current.url !== tab.url) throw new Error("页面已变化，请重新开始选取。");
+      await browser.tabs.sendMessage(tabId, { type: "start-selection", mode, selectionKey: selection.key });
+      return;
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // Serialize screenshot attempts and leave room under Chrome's two-captures-per-second quota.
+      const pending = freezeQueue.then(async () => {
+        requireCurrent();
+        const delay = 600 - (Date.now() - lastFreezeCaptureAt);
+        if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+        requireCurrent();
+        const key = crypto.randomUUID();
+        const prepared = await browser.tabs.sendMessage(tabId, { type: "prepare-selection", mode, selectionKey: selection.key, key }) as { prepared?: boolean; key?: string };
+        requireCurrent();
+        if (!prepared?.prepared || prepared.key !== key) throw new Error("无法准备冻结页面，请重新选取。");
+        lastFreezeCaptureAt = Date.now();
+        const frame = await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+        requireCurrent();
+        const current = await browser.tabs.get(tabId);
+        requireCurrent();
+        if (!current.active || current.url !== tab.url) throw new Error("页面已变化，请重新开始选取。");
+        return { key, frame };
+      });
+      freezeQueue = pending.then(() => {}, () => {});
+      const { key, frame } = await pending;
+      requireCurrent();
+      // Make the matching image available before the content script exposes its overlay.
+      selection.frame = frame;
+      const accepted = await browser.tabs.sendMessage(tabId, { type: "accept-freeze", selectionKey: selection.key, key, frame }) as { valid?: boolean; key?: string; stale?: boolean };
+      if (accepted?.valid && accepted.key === key) return;
+      requireCurrent();
+      selection.frame = undefined;
+      if (accepted?.stale) throw new Error("选取已取消或被新的选取替代。");
+    }
+    throw new Error("页面持续变化，无法冻结一致的截图和内容，请等待页面稳定后重试。");
+  } catch (error) {
+    if (selecting.get(tabId) === selection) selecting.delete(tabId);
+    await browser.tabs.sendMessage(tabId, { type: "cancel-selection", selectionKey: selection.key }).catch(() => {});
+    throw error;
+  }
 }
 browser.commands.onCommand.addListener(async command => {
   if (command !== "capture-region") return;
@@ -125,16 +180,18 @@ async function cropPng(dataUrl: string, capture: Pick<Capture, "page">): Promise
   } finally { bitmap.close(); }
 }
 async function captureSelection(message: any, tabId: number) {
-  if (!selecting.delete(tabId)) throw new Error("选取已过期，请重新开始。");
-  const tab = await browser.tabs.get(tabId);
+  const selection = selecting.get(tabId);
+  if (!selection || selection.key !== message.selectionKey) throw new Error("选取已过期，请重新开始。");
+  selecting.delete(tabId);
   const verify = async () => {
     const current = await browser.tabs.get(tabId);
-    const checked = await browser.tabs.sendMessage(tabId, { type: "verify-selection", key: message.key }) as { valid?: boolean };
+    const checked = await browser.tabs.sendMessage(tabId, { type: "verify-selection", selectionKey: selection.key, key: message.key }) as { valid?: boolean };
     if (!current.active || current.url !== message.page?.url || !checked?.valid) throw new Error("页面或选区已变化，请重新选取。");
   };
   try {
+    const tab = await browser.tabs.get(tabId);
     await verify();
-    const full = await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+    const full = selection.frame ?? await browser.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     await verify();
     const capture: Capture = { id: crypto.randomUUID(), page: message.page, dom: message.dom, png: "", prompt: "" };
     capture.png = await cropPng(full, capture);
@@ -142,7 +199,7 @@ async function captureSelection(message: any, tabId: number) {
     await setPreview({ capture, tabId, createdAt: Date.now() });
     await browser.windows.create({ url: browser.runtime.getURL(`ui.html?capture=${capture.id}`), type: "popup", width: 540, height: 790 });
     return { ok: true };
-  } finally { await browser.tabs.sendMessage(tabId, { type: "release-selection" }).catch(() => {}); }
+  } finally { await browser.tabs.sendMessage(tabId, { type: "release-selection", key: message.key }).catch(() => {}); }
 }
 
 async function loginState(preview: Preview): Promise<LoginState> {
@@ -215,6 +272,10 @@ async function attachCapture(message: any) {
 
 browser.runtime.onMessage.addListener((message: any, sender: browser.Runtime.MessageSender) => {
   if (message?.type === "selection-ready" && sender.tab?.id && sender.frameId === 0) return captureSelection(message, sender.tab.id).catch(error => ({ error: error.message }));
+  if (message?.type === "selection-cancelled" && sender.tab?.id && sender.frameId === 0) {
+    if (selecting.get(sender.tab.id)?.key === message.selectionKey) selecting.delete(sender.tab.id);
+    return Promise.resolve({ ok: true });
+  }
   if (!sender.url?.startsWith(browser.runtime.getURL(""))) return;
   return (async () => {
     switch (message?.type) {

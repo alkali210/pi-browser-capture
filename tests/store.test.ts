@@ -94,18 +94,21 @@ test("clears attachments by session and across all sessions", t => {
   assert.equal(store.list(sid2).length, 0);
 });
 
-test("login-only attachments require credentials and persist no image or DOM", t => {
+test("login-mode attachments persist no image or DOM and credentials are optional", t => {
   const root = mkdtempSync(join(tmpdir(), "pi-login-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const store = new CaptureStore(root), sid = randomUUID(), c = capture();
   c.page.mode = "login"; c.png = "";
   c.dom = { html: "", text: "", truncated: false, warnings: [] };
-  assert.throws(() => store.save(sid, c), /login-only/);
-  c.login = { origin: new URL(c.page.url).origin, capturedAt: new Date().toISOString(), cookies: [], localStorage: { token: "secret" }, sessionStorage: {}, warnings: [] };
   const { saved } = store.save(sid, c);
-  for (const file of ["screenshot.png", "dom.txt", "dom.html"]) assert.equal(existsSync(join(saved.directory, file)), false);
-  assert.ok(existsSync(join(saved.directory, "login-state.json")));
+  for (const file of ["screenshot.png", "dom.txt", "dom.html", "login-state.json"]) assert.equal(existsSync(join(saved.directory, file)), false);
   const expanded = expandInput(store, sid, draftAttachment(saved));
   assert.equal(expanded.images.length, 0);
-  assert.ok(!expanded.text.includes("secret"));
+  c.id = randomUUID();
+  c.login = { origin: new URL(c.page.url).origin, capturedAt: new Date().toISOString(), cookies: [], localStorage: { token: "secret" }, sessionStorage: {}, warnings: [] };
+  const { saved: withLogin } = store.save(sid, c);
+  assert.ok(existsSync(join(withLogin.directory, "login-state.json")));
+  const expandedLogin = expandInput(store, sid, draftAttachment(withLogin));
+  assert.equal(expandedLogin.images.length, 0);
+  assert.ok(!expandedLogin.text.includes("secret"));
 });

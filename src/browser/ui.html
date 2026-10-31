@@ -4,7 +4,7 @@
 <body>
   <main>
 <header><div class="brand"><img src="icon.svg" alt="" width="34" height="34"><strong>Browser Capture</strong></div><span class="badge" id="connection">连接中</span></header>
-    <section id="selection" class="card"><h2>选取页面</h2><div class="mode-grid"><button id="region" class="mode" type="button"><span class="mode-icon">⌗</span><strong>矩形框选</strong></button><button id="element" class="mode" type="button"><span class="mode-icon">↖</span><strong>元素点选</strong></button></div><p class="hint">快捷键 Alt + Shift + P 框选 · Esc 取消</p></section>
+    <section id="selection" class="card"><h2>选取页面</h2><div class="mode-grid"><button id="region" class="mode" type="button" disabled><span class="mode-icon">⌗</span><strong>矩形框选</strong></button><button id="element" class="mode" type="button" disabled><span class="mode-icon">↖</span><strong>元素点选</strong></button></div><label class="check"><input type="checkbox" id="freeze-page" disabled><span><strong>选取时冻结画面</strong><small>使用静态截图遮罩固定当前可见画面；Esc 取消或选取完成后恢复，不会暂停网络请求或页面脚本。</small></span></label><p class="hint">快捷键 Alt + Shift + P 框选 · Esc 取消</p></section>
     <section id="review" hidden>
       <div class="image-frame"><img id="screenshot" alt="选区截图预览"></div>
       <div class="page-meta"><strong id="page-title"></strong><span id="page-url"></span><span id="dimensions"></span></div>

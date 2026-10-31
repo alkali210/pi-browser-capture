@@ -96,7 +96,7 @@ export function draftAttachment(saved: SavedCapture): string {
   };
   const sections = [
     "## 网页附件",
-    `- **页面**：${inline(c.page.title || "未命名页面")}\n- **网址**：${code(c.page.url)}\n- **内容**：${c.page.mode === "login" ? "仅登录状态（无截图或 DOM）" : `截图 · ${c.includeFullDom ? "完整 DOM" : "DOM 摘要"}${saved.hasLogin ? " · 登录状态" : ""}`}`,
+    `- **页面**：${inline(c.page.title || "未命名页面")}\n- **网址**：${code(c.page.url)}\n- **内容**：${c.page.mode === "login" ? `仅链接${saved.hasLogin ? " · 登录状态" : ""}` : `截图 · ${c.includeFullDom ? "完整 DOM" : "DOM 摘要"}${saved.hasLogin ? " · 登录状态" : ""}`}`,
   ];
   if (c.prompt.trim()) sections.push(`### 需求\n\n${safeText(c.prompt)}`);
   if (c.page.mode !== "login") {

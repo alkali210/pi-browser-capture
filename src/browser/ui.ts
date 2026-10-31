@@ -9,6 +9,24 @@ let sending = false, finished = false;
 const target = $<HTMLSelectElement>("target");
 const login = $<HTMLInputElement>("login");
 const fullDom = $<HTMLInputElement>("full-dom");
+const freezePage = $<HTMLInputElement>("freeze-page");
+let freezeSettingReady = false;
+let savedFreezePage = false;
+function setFreezeSettingReady(ready: boolean) {
+  freezeSettingReady = ready;
+  freezePage.disabled = !ready;
+  for (const mode of ["region", "element"]) $<HTMLButtonElement>(mode).disabled = !ready;
+}
+freezePage.addEventListener("change", async () => {
+  setFreezeSettingReady(false);
+  try {
+    await browser.storage.local.set({ freezePage: freezePage.checked });
+    savedFreezePage = freezePage.checked;
+  } catch (error) {
+    freezePage.checked = savedFreezePage;
+    fail(error);
+  } finally { setFreezeSettingReady(true); }
+});
 fullDom.checked = false;
 function message(text: string, error = false) { const el = $("message"); el.textContent = text; el.classList.toggle("error", error); }
 async function request(data: Record<string, unknown>): Promise<any> {
@@ -37,7 +55,7 @@ async function refresh() {
     if (target.value) target.dataset.everSelected = "true";
     target.dataset.sessions = serialized;
   }
-  $<HTMLButtonElement>("send").disabled = (!capture || (capture.page.mode === "login" && !login.checked)) || !target.value || sending || finished;
+  $<HTMLButtonElement>("send").disabled = !capture || !target.value || sending || finished;
 }
 target.addEventListener("change", () => { if (target.value) target.dataset.everSelected = "true"; void refresh().catch(fail); });
 $("pair").addEventListener("click", async () => {
@@ -51,8 +69,10 @@ $("pair").addEventListener("click", async () => {
   } catch (error) { fail(error); } finally { button.disabled = false; }
 });
 for (const mode of ["region", "element"]) $(mode).addEventListener("click", async () => {
+  if (!freezeSettingReady) return;
   try {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!freezeSettingReady) return;
     if (!tab?.id) throw new Error("未找到当前标签页。");
     await request({ type: "start", tabId: tab.id, mode });
     window.close();
@@ -63,7 +83,7 @@ login.addEventListener("change", async () => {
   try {
     // Request from the checkbox's user gesture, before any asynchronous work.
     const granted = await browser.permissions.request({ permissions: ["cookies"], origins: [`${new URL(capture.page.url).origin}/*`] });
-    if (!granted) { login.checked = false; message("未授权登录状态读取；仍可发送截图和 DOM。"); }
+    if (!granted) { login.checked = false; message(capture.page.mode === "login" ? "未授权登录状态读取；仍可仅发送链接与提示词。" : "未授权登录状态读取；仍可发送截图和 DOM。"); }
   } catch (error) { login.checked = false; fail(error); }
   await refresh().catch(fail);
 });
@@ -86,6 +106,10 @@ $("discard").addEventListener("click", async () => { try { await request({ type:
 $("close").addEventListener("click", () => window.close());
 async function init() {
   if (params.has("error")) message(params.get("error")!, true);
+  const settings = await browser.storage.local.get("freezePage");
+  savedFreezePage = settings.freezePage === true;
+  freezePage.checked = savedFreezePage;
+  setFreezeSettingReady(true);
   if (captureId) {
     $("selection").hidden = true;
     const { preview } = await request({ type: "preview", id: captureId });
@@ -110,7 +134,7 @@ async function init() {
       fullDom.closest<HTMLElement>("label")!.hidden = true;
       $("page-title").textContent = capture!.page.title;
       $("page-url").textContent = capture!.page.url;
-      $("dimensions").textContent = "勾选登录状态后，可不选区仅附加凭据。";
+      $("dimensions").textContent = "未选区：仅发送链接与提示词，不包含附件。";
     }
   }
   await refresh();
