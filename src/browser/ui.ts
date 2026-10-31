@@ -87,7 +87,7 @@ $("close").addEventListener("click", () => window.close());
 async function init() {
   if (params.has("error")) message(params.get("error")!, true);
   if (captureId) {
-    $("intro").hidden = true; $("selection").hidden = true;
+    $("selection").hidden = true;
     const { preview } = await request({ type: "preview", id: captureId });
     if (!preview) throw new Error("预览已过期或已发送。请回到网页重新选取。");
     capture = preview.capture;

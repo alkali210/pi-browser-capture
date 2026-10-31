@@ -43,13 +43,6 @@ header {
     letter-spacing: -.3px
 }
 
-.brand span {
-    display: block;
-    font-size: 11px;
-    color: #738078;
-    margin-top: 3px
-}
-
 .badge {
     font-size: 11px;
     white-space: nowrap;
@@ -62,14 +55,6 @@ header {
 .badge.online {
     background: #dcefe5;
     color: #246748
-}
-
-.eyebrow {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: #648777;
-    margin: 0 0 9px
 }
 
 h1 {
@@ -158,11 +143,6 @@ summary:focus-visible {
     font-size: 13px
 }
 
-.mode>span:last-child {
-    font-size: 11px;
-    color: #7a897f
-}
-
 .hint {
     font-size: 10px;
     color: #8a958c;
@@ -180,12 +160,6 @@ summary:focus-visible {
 .pair summary {
     font-size: 12px;
     cursor: pointer
-}
-
-.pair summary span {
-    float: right;
-    font-size: 10px;
-    color: #8a958c
 }
 
 .field {
@@ -359,24 +333,6 @@ input::placeholder {
 
 #message.error {
     color: #a44536
-}
-
-footer {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-    margin-top: 25px;
-    color: #a0aaa0;
-    font-size: 9px;
-    letter-spacing: .6px
-}
-
-.dot {
-    width: 5px;
-    height: 5px;
-    background: #92a88f;
-    border-radius: 50%
 }
 
 .success {
