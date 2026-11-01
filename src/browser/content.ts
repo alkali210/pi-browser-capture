@@ -91,12 +91,17 @@ if (!scope.__piCaptureLoaded) {
       const frozen = freezeDom(document, mode === "element");
       const state: Preparation = { key, selectionKey: requestKey, generation, mode, frozen, geometry: initialGeometry, page, changed: () => { if (observer.takeRecords().length) changed = true; return changed; }, stop };
       preparation = state;
-      // CSS animations and stylesheet/font layout changes need no DOM mutation.
-      const watchLayout = () => {
-        if (stopped) return;
-        try { if (!changed && (geometry() !== initialGeometry || !frozen.matches(freezeDom(document, mode === "element")))) changed = true; }
-        catch { changed = true; }
-        frame = requestAnimationFrame(watchLayout);
+      // Sample CSS-only changes without rebuilding the DOM on every animation frame.
+      // The post-decode check remains unconditional, even just after a periodic sample.
+      let lastLayoutCheck = performance.now();
+      const watchLayout = (now: number) => {
+        if (stopped || changed) return;
+        if (now - lastLayoutCheck >= 200) {
+          try { if (geometry() !== initialGeometry || !frozen.matches(freezeDom(document, false))) changed = true; }
+          catch { changed = true; }
+          lastLayoutCheck = performance.now();
+        }
+        if (!changed) frame = requestAnimationFrame(watchLayout);
       };
       frame = requestAnimationFrame(watchLayout);
     } catch (error) { stop(); throw error; }
@@ -109,8 +114,7 @@ if (!scope.__piCaptureLoaded) {
       image.src = message.frame;
       await image.decode();
       if (preparation !== state || state.generation !== generation) return { valid: false, stale: true };
-      const current = freezeDom(document, state.mode === "element");
-      if (state.changed() || state.geometry !== geometry() || !state.frozen.matches(current)) {
+      if (state.changed() || state.geometry !== geometry() || !state.frozen.matches(freezeDom(document, false))) {
         clearPreparation();
         return { valid: false };
       }

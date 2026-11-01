@@ -57,6 +57,8 @@ Frozen snapshots omit offscreen text, and rectangle selection skips the element-
 
 Before showing the frozen overlay, the extension prepares an immutable DOM snapshot, captures the image, and checks again after decoding. DOM mutations (including reverted mutations) and observed layout changes discard the image/snapshot pair and trigger a fresh attempt. There are at most three attempts, with screenshots spaced at least 600 ms apart; if the page never stabilizes, the extension reports an error instead of attaching mismatched pixels and DOM. Updates after a pair is accepted do not invalidate that frozen selection.
 
+During preparation, periodic full-layout comparisons run at most once every 200 ms and skip the element-picking index. DOM and viewport changes still invalidate an attempt immediately. Decoding is always followed by a fresh consistency check, even immediately after a periodic sample; attempts already known to be invalid skip that extra snapshot.
+
 Frozen element picking follows CSS painting phases, including positioned `z-index: auto` elements above in-flow siblings and the boundaries of negative, zero, and positive stacking contexts.
 
 Existing input is not overwritten. Multiple selections can be appended to the same draft. The Pi editor displays the attachment count above the input, and the draft contains `[pi-browser-capture:…]` markers. Deleting a marker cancels submission of the corresponding image and DOM context. The accompanying plain text remains available for editing or deletion.

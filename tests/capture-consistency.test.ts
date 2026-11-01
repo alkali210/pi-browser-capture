@@ -25,7 +25,7 @@ interface Harness {
   dom: JSDOM; window: DOMWindow; document: Document; target: HTMLButtonElement; layout: Rect;
   screenshots: Frame[]; screenshotTimes: number[]; crops: Frame[]; observers: Set<MutationObserver>;
   frames: Map<number, FrameRequestCallback>; contentMessages: any[]; sourceMessages: any[];
-  start(): Promise<any>; contentMessage(message: any): Promise<any>; pumpFrame(): void;
+  start(): Promise<any>; contentMessage(message: any): Promise<any>; pumpFrame(elapsed: number): void;
   select(x?: number): Promise<Capture>; escape(): boolean; close(): void;
 }
 type Hooks = { capture?: (attempt: number, state: Harness) => void | Promise<void>; decode?: (attempt: number, state: Harness) => void | Promise<void> };
@@ -42,7 +42,8 @@ async function harness(hooks: Hooks = {}, freezePage = true): Promise<Harness> {
   window.HTMLElement.prototype.showPopover = () => {};
   window.alert = message => { throw new Error(String(message)); };
   const frames = new Map<number, FrameRequestCallback>();
-  let nextFrame = 0;
+  let nextFrame = 0, frameTime = 0;
+  Object.defineProperty(window.performance, "now", { value: () => frameTime });
   window.requestAnimationFrame = callback => { frames.set(++nextFrame, callback); return nextFrame; };
   window.cancelAnimationFrame = id => { frames.delete(id); };
   window.setTimeout = ((callback: () => void) => { queueMicrotask(callback); return 1; }) as typeof window.setTimeout;
@@ -133,7 +134,7 @@ async function harness(hooks: Hooks = {}, freezePage = true): Promise<Harness> {
     dom, window, document, target, layout, screenshots, screenshotTimes, crops, observers, frames, contentMessages, sourceMessages,
     start: () => backgroundMessage({ type: "start", tabId: 1, mode: "element" }, { url: extensionUrl + "ui.html" }),
     contentMessage,
-    pumpFrame() { const callbacks = [...frames.values()]; frames.clear(); for (const callback of callbacks) callback(0); },
+    pumpFrame(elapsed) { frameTime += elapsed; const callbacks = [...frames.values()]; frames.clear(); for (const callback of callbacks) callback(frameTime); },
     async select(x = layout.x + 5) {
       for (const type of ["pointerdown", "pointerup"]) window.dispatchEvent(new window.MouseEvent(type, { clientX: x, clientY: layout.y + 5, button: 0, bubbles: true, cancelable: true }));
       await selectionFinished;
@@ -190,13 +191,29 @@ for (const transient of [false, true]) test(`CSS-only layout changes${transient 
   const state = await harness({ decode(attempt, page) {
     if (attempt !== 1) return;
     page.layout.x = 150;
-    if (transient) { page.pumpFrame(); page.layout.x = 20; }
+    if (transient) { page.pumpFrame(200); page.layout.x = 20; }
   } });
   try {
     assert.equal((await state.start()).ok, true);
     assert.equal(state.screenshots.length, 2);
     const capture = await state.select();
     assert.equal(capture.page.rect.x, transient ? 20 : 150);
+  } finally { state.close(); }
+});
+
+test("the final consistency check detects CSS-only movement just after a periodic sample", { timeout: 5_000 }, async () => {
+  const state = await harness({ decode(attempt, page) {
+    if (attempt !== 1) return;
+    page.pumpFrame(200);
+    page.pumpFrame(16);
+    page.layout.x = 150;
+  } });
+  try {
+    assert.equal((await state.start()).ok, true);
+    assert.equal(state.screenshots.length, 2);
+    const capture = await state.select();
+    assert.equal(capture.page.rect.x, 150);
+    assert.deepEqual(state.crops, [{ text: "Original label", x: 150 }]);
   } finally { state.close(); }
 });
 
